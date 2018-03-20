@@ -8,60 +8,62 @@ import (
 	"strings"
 	"syscall"
 	"testing"
+	"time"
 )
 
 var mainTests = []struct {
-	args     []string
-	stdin    string
-	stdout   string
-	stderr   string
-	exitcode int
+	args        []string
+	stdin       string
+	stdout      string
+	stderr      string
+	maxDuration time.Duration
 }{
-	{[]string{"true"}, "", "", "", 0},
-	{[]string{"false"}, "", "", "exit status 1\n", 1},
-	{[]string{"echo", "-n", "Hello, world!"}, "", "Hello, world!", "", 0},
-	{[]string{"wc", "-c"}, "Hello, world!", "13\n", "", 0},
+	{[]string{"true"}, "", "", "", 1 * time.Second},
+	{[]string{"false"}, "", "", "exit status 1\n", 1 * time.Second},
+	{[]string{"echo", "-n", "Hello, world!"}, "", "Hello, world!", "", 1 * time.Second},
+	{[]string{"wc", "-c"}, "Hello, world!", "13\n", "", 1 * time.Second},
+	{[]string{"sleep", "5"}, "", "", "exit status 255\n", 3 * time.Second},
+	{[]string{"bash", "-c", "while sleep 1; do echo hello; done"}, "", "hello\nhello\nhello\nhello\n", "exit status 255\n", 11 * time.Second},
 }
 
 func TestTrue(t *testing.T) {
 
 	for _, tt := range mainTests {
+		t.Run(fmt.Sprintf("command %s", tt.args), func(t *testing.T) {
+			t.Parallel()
 
-		args := []string{"go", "run", "main.go"}
-		args = append(args, tt.args...)
+			args := []string{"go", "run", "main.go", "5", "2"}
+			args = append(args, tt.args...)
 
-		cmd := exec.Command(args[0], args[1:]...)
-		stdin, err := cmd.StdinPipe()
-		if err != nil {
-			t.Errorf("failed to prepare command input: %s", err)
-		}
-		io.WriteString(stdin, tt.stdin)
-		stdin.Close()
+			cmd := exec.Command(args[0], args[1:]...)
+			stdin, err := cmd.StdinPipe()
+			if err != nil {
+				t.Errorf("failed to prepare command input: %s", err)
+			}
+			io.WriteString(stdin, tt.stdin)
+			stdin.Close()
 
-		var stdout, stderr bytes.Buffer
-		cmd.Stdout = &stdout
-		cmd.Stderr = &stderr
+			var stdout, stderr bytes.Buffer
+			cmd.Stdout = &stdout
+			cmd.Stderr = &stderr
 
-		err = cmd.Run()
+			start := time.Now()
+			err = cmd.Run()
+			elapsed := time.Since(start)
 
-		output := string(stdout.Bytes())
-		if strings.Compare(output, tt.stdout) != 0 {
-			t.Errorf("execution stdout (%s) => %q, want %q", tt.args, output, tt.stdout)
-		}
-		errors := string(stderr.Bytes())
-		if strings.Compare(errors, tt.stderr) != 0 {
-			t.Errorf("execution stderr (%s) => %q, want %q", tt.args, errors, tt.stderr)
-		}
-
-		e, err := getExitcode(err)
-		if err != nil {
-			t.Fatalf("comparing exitcode (%s) failed: %v", tt.args, err)
-		}
-		if e != tt.exitcode {
-			t.Errorf("execution exitcode (%s) => %q, want %q", tt.args, e, tt.exitcode)
-		}
+			output := string(stdout.Bytes())
+			if strings.Compare(output, tt.stdout) != 0 {
+				t.Errorf("execution stdout (%s) => %q, want %q", tt.args, output, tt.stdout)
+			}
+			errors := string(stderr.Bytes())
+			if strings.Compare(errors, tt.stderr) != 0 {
+				t.Errorf("execution stderr (%s) => %q, want %q", tt.args, errors, tt.stderr)
+			}
+			if elapsed > tt.maxDuration {
+				t.Errorf("execution duration (%s) => %q, want %q", tt.args, elapsed, tt.maxDuration)
+			}
+		})
 	}
-
 }
 
 func getExitcode(err error) (int, error) {
