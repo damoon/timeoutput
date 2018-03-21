@@ -6,7 +6,6 @@ import (
 	"io"
 	"os/exec"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 )
@@ -23,7 +22,11 @@ var mainTests = []struct {
 	{[]string{"echo", "-n", "Hello, world!"}, "", "Hello, world!", "", 1 * time.Second},
 	{[]string{"wc", "-c"}, "Hello, world!", "13\n", "", 1 * time.Second},
 	{[]string{"sleep", "5"}, "", "", "exit status 255\n", 3 * time.Second},
-	{[]string{"bash", "-c", "while sleep 1; do echo hello; done"}, "", "hello\nhello\nhello\nhello\n", "exit status 255\n", 11 * time.Second},
+	{[]string{"bash", "-c", "while sleep 1; do echo hello; done"},
+		"",
+		"hello\nhello\nhello\nhello\n",
+		"exit status 255\n",
+		11 * time.Second},
 }
 
 func TestTrue(t *testing.T) {
@@ -48,14 +51,14 @@ func TestTrue(t *testing.T) {
 			cmd.Stderr = &stderr
 
 			start := time.Now()
-			err = cmd.Run()
+			cmd.Run()
 			elapsed := time.Since(start)
 
-			output := string(stdout.Bytes())
+			output := stdout.String()
 			if strings.Compare(output, tt.stdout) != 0 {
 				t.Errorf("execution stdout (%s) => %q, want %q", tt.args, output, tt.stdout)
 			}
-			errors := string(stderr.Bytes())
+			errors := stderr.String()
 			if strings.Compare(errors, tt.stderr) != 0 {
 				t.Errorf("execution stderr (%s) => %q, want %q", tt.args, errors, tt.stderr)
 			}
@@ -64,16 +67,4 @@ func TestTrue(t *testing.T) {
 			}
 		})
 	}
-}
-
-func getExitcode(err error) (int, error) {
-	if err == nil {
-		return 0, nil
-	}
-	exitError, ok := err.(*exec.ExitError)
-	if !ok {
-		return 0, fmt.Errorf("failed to cast exitcode %v", err)
-	}
-	waitStatus := exitError.Sys().(syscall.WaitStatus)
-	return waitStatus.ExitStatus(), nil
 }

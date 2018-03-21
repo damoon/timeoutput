@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"io"
 	"log"
 	"os"
@@ -36,25 +35,18 @@ func main() {
 	cmd.Stdout = outW
 	cmd.Stderr = errW
 
-	gracefulStop := make(chan os.Signal, 1)
-	signal.Notify(gracefulStop, syscall.SIGTERM)
-	signal.Notify(gracefulStop, syscall.SIGINT)
-	go func() {
-		for s := range gracefulStop {
-			cmd.Process.Signal(s)
-		}
-	}()
-
 	globalDuration := time.Duration(globalTimeout) * time.Second
 	outputDuration := time.Duration(outputTimeout) * time.Second
-
-	globalTimer := time.NewTimer(globalDuration)
-	outputTimer := time.NewTimer(outputDuration)
 
 	err = cmd.Start()
 	if err != nil {
 		log.Fatalf("failed to start process: %s", err)
 	}
+
+	forwardInterrupts(cmd)
+
+	globalTimer := time.NewTimer(globalDuration)
+	outputTimer := time.NewTimer(outputDuration)
 
 	go transfer(outR, os.Stdout, outputTimer, outputDuration)
 	go transfer(errR, os.Stderr, outputTimer, outputDuration)
@@ -74,11 +66,25 @@ func main() {
 			waitStatus := exitError.Sys().(syscall.WaitStatus)
 			os.Exit(waitStatus.ExitStatus())
 		}
-		fmt.Fprintf(os.Stderr, "execution failed: %v\n", err)
+		log.Fatalf("waiting for program exit failed: %s", err)
 		os.Exit(127)
 	}
 
 	os.Exit(0)
+}
+
+func forwardInterrupts(cmd *exec.Cmd) {
+	gracefulStop := make(chan os.Signal, 1)
+	signal.Notify(gracefulStop, syscall.SIGTERM)
+	signal.Notify(gracefulStop, syscall.SIGINT)
+	go func() {
+		for s := range gracefulStop {
+			err := cmd.Process.Signal(s)
+			if err != nil {
+				log.Fatalf("failed to signal process: %s", err)
+			}
+		}
+	}()
 }
 
 func shutdown(gt, ot *time.Timer, c *exec.Cmd) {
@@ -102,7 +108,10 @@ func transfer(r io.Reader, w io.WriteCloser, t *time.Timer, d time.Duration) {
 		b := make([]byte, 1024)
 		n, err := r.Read(b)
 		if err == io.EOF {
-			w.Close()
+			e := w.Close()
+			if e != nil {
+				log.Fatalf("failed to close output: %s", e)
+			}
 			break
 		}
 		if err != nil {
@@ -112,6 +121,9 @@ func transfer(r io.Reader, w io.WriteCloser, t *time.Timer, d time.Duration) {
 			<-t.C
 		}
 		t.Reset(d)
-		w.Write(b[:n])
+		_, err = w.Write(b[:n])
+		if err != nil {
+			log.Fatalf("failed to write to output: %s", err)
+		}
 	}
 }
