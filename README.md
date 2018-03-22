@@ -2,6 +2,9 @@
 
 Limits the execution time of a command.
 
+[![Go Report Card](https://goreportcard.com/badge/github.com/damoon/timeoutput)](https://goreportcard.com/report/github.com/damoon/timeoutput)
+
+
 ## Usage
 
 `timeoutput <global timeout> <output timeout> <command>...`
