@@ -105,7 +105,7 @@ func shutdown(gt, ot *time.Timer, c *exec.Cmd) {
 
 func transfer(r io.Reader, w io.WriteCloser, t *time.Timer, d time.Duration) {
 	for {
-		b := make([]byte, 1024)
+		b := make([]byte, 1024*10)
 		n, err := r.Read(b)
 		if err == io.EOF {
 			e := w.Close()
