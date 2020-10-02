@@ -2,8 +2,6 @@
 
 Limits the execution time of a command.
 
-[![CircleCI](https://circleci.com/gh/damoon/timeoutput.svg?style=shield)](https://circleci.com/gh/damoon/timeoutput)
-
 [![Go Report Card](https://goreportcard.com/badge/github.com/damoon/timeoutput)](https://goreportcard.com/report/github.com/damoon/timeoutput)
 
 
